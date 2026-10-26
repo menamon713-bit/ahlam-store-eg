@@ -388,12 +388,34 @@ function escapeHTML(value){
   }[ch]));
 }
 
+function isValidWhatsAppNumber(number){
+  const value = String(number || "").replace(/\D/g, "");
+  return /^\d{10,15}$/.test(value) && value !== "201000000000";
+}
+
+function isValidTikTokUser(username){
+  const value = String(username || "").trim();
+  return /^[A-Za-z0-9._]{2,24}$/.test(value) && value.toLowerCase() !== "ahlamstore";
+}
+
+function safeImagePath(path){
+  const value = String(path || "");
+  if(/^images\/[A-Za-z0-9_-]+\.(jpg|jpeg|png|webp|avif)$/i.test(value)) return value;
+  return "images/bag-1.jpg";
+}
+
+function safeIconType(type){
+  const allowed = new Set(["bag-icon", "clutch-icon", "cross-icon"]);
+  return allowed.has(type) ? type : "bag-icon";
+}
+
 function bagFallback(type){
-  return '<div class="image-fallback" aria-hidden="true"><svg viewBox="0 0 120 120"><use href="#'+type+'"></use></svg></div>';
+  const icon = safeIconType(type);
+  return '<div class="image-fallback" aria-hidden="true"><svg viewBox="0 0 120 120"><use href="#'+icon+'"></use></svg></div>';
 }
 
 function imageMarkup(product, extraClass=""){
-  return '<div class="'+extraClass+'"><img src="'+escapeHTML(product.image)+'" alt="'+escapeHTML(product.name)+'" loading="lazy" data-fallback-type="'+escapeHTML(product.type)+'">'+bagFallback(product.type)+'</div>';
+  return '<div class="'+extraClass+'"><img src="'+escapeHTML(safeImagePath(product.image))+'" alt="'+escapeHTML(product.name)+'" loading="lazy" data-fallback-type="'+escapeHTML(product.type)+'">'+bagFallback(product.type)+'</div>';
 }
 
 function renderFilters(){
@@ -414,7 +436,7 @@ function renderProducts(){
     const old = product.oldPrice ? '<span class="old-price">'+money(product.oldPrice)+'</span>' : "";
     return '<article class="product-card" style="animation-delay:'+(index*55)+'ms">'+
       '<div class="product-media">'+tag+
-      '<img src="'+escapeHTML(product.image)+'" alt="'+escapeHTML(product.name)+'" loading="lazy" data-fallback-type="'+escapeHTML(product.type)+'">'+
+      '<img src="'+escapeHTML(safeImagePath(product.image))+'" alt="'+escapeHTML(product.name)+'" loading="lazy" data-fallback-type="'+escapeHTML(product.type)+'">'+
       bagFallback(product.type)+
       '<button class="quick-view" type="button" data-add="'+product.id+'">إضافة سريعة للسلة</button></div>'+
       '<div class="product-info"><div class="product-title-row"><h3 class="product-title">'+escapeHTML(product.name)+'</h3>'+
@@ -451,7 +473,7 @@ function renderCart(){
       total += quantity * product.price;
       message.push("- "+product.name+" (كود "+product.id+") × "+quantity+" = "+(quantity*product.price)+" جنيه");
       return '<div class="cart-row">'+
-        '<img class="cart-thumb" src="'+escapeHTML(product.image)+'" alt="" data-fallback-type="'+escapeHTML(product.type)+'">'+
+        '<img class="cart-thumb" src="'+escapeHTML(safeImagePath(product.image))+'" alt="" data-fallback-type="'+escapeHTML(product.type)+'">'+
         '<div><div class="cart-item-name">'+escapeHTML(product.name)+'</div><div class="cart-item-price">'+money(product.price)+'</div>'+
         '<button class="remove-item" type="button" data-remove="'+id+'">حذف</button></div>'+
         '<div class="qty"><button type="button" data-minus="'+id+'" aria-label="تقليل الكمية">−</button><span>'+quantity+'</span><button type="button" data-plus="'+id+'" aria-label="زيادة الكمية">+</button></div>'+
@@ -464,7 +486,7 @@ function renderCart(){
   $("cart-total").textContent = money(total);
   const checkout = $("checkout");
   checkout.setAttribute("aria-disabled", ids.length ? "false" : "true");
-  if(ids.length && WA_NUMBER !== "201000000000"){
+  if(ids.length && isValidWhatsAppNumber(WA_NUMBER)){
     checkout.href = "https://wa.me/"+WA_NUMBER+"?text="+encodeURIComponent(message.join("\n")+"\nإجمالي المنتجات: "+total+" جنيه\nمن فضلكم أكدوا التوفر وتكلفة الشحن.");
   } else {
     checkout.href = "#";
@@ -531,17 +553,27 @@ function setupReveal(){
 }
 
 function setupLinks(){
-  const validNumber = /^\d{10,15}$/.test(WA_NUMBER) && WA_NUMBER !== "201000000000";
-  const validTikTok = /^[a-zA-Z0-9._]{2,24}$/.test(TT_USER) && TT_USER !== "ahlamstore";
-  const waURL = validNumber ? "https://wa.me/"+WA_NUMBER : "#";
-  const ttURL = validTikTok ? "https://www.tiktok.com/@"+TT_USER : "#";
-  ["contact-wa","footer-wa"].forEach(id => {
-    $(id).href = waURL;
-    if(!validNumber) $(id).addEventListener("click", e => {e.preventDefault();showToast("عدّلي رقم واتساب في الكود الأول");});
+  const validNumber = isValidWhatsAppNumber(WA_NUMBER);
+  const validTikTok = isValidTikTokUser(TT_USER);
+  const waURL = validNumber ? "https://wa.me/" + WA_NUMBER.replace(/\D/g, "") : "#";
+  const ttURL = validTikTok ? "https://www.tiktok.com/@" + encodeURIComponent(TT_USER.trim()) : "#";
+
+  ["contact-wa", "footer-wa"].forEach(id => {
+    const link = $(id);
+    link.href = waURL;
+    if(!validNumber) link.addEventListener("click", event => {
+      event.preventDefault();
+      showToast("عدّلي رقم واتساب الحقيقي في أول الكود");
+    });
   });
-  ["contact-tt","footer-tt"].forEach(id => {
-    $(id).href = ttURL;
-    if(!validTikTok) $(id).addEventListener("click", e => {e.preventDefault();showToast("عدّلي اسم حساب تيك توك في الكود الأول");});
+
+  ["contact-tt", "footer-tt"].forEach(id => {
+    const link = $(id);
+    link.href = ttURL;
+    if(!validTikTok) link.addEventListener("click", event => {
+      event.preventDefault();
+      showToast("عدّلي اسم حساب تيك توك الحقيقي في أول الكود");
+    });
   });
 }
 
@@ -557,7 +589,11 @@ document.addEventListener("click", event => {
   const addButton = event.target.closest("[data-add]");
   if(addButton){addToCart(addButton.dataset.add);return;}
   const plus = event.target.closest("[data-plus]");
-  if(plus){cart[plus.dataset.plus]++;renderCart();return;}
+  if(plus){
+    const id = plus.dataset.plus;
+    if(Object.prototype.hasOwnProperty.call(cart, id) && cart[id] < 99){cart[id]++;renderCart();}
+    return;
+  }
   const minus = event.target.closest("[data-minus]");
   if(minus){
     cart[minus.dataset.minus]--;
@@ -596,9 +632,9 @@ $("checkout").addEventListener("click",event => {
     showToast("ضيفي منتج للسلة الأول");
     return;
   }
-  if(WA_NUMBER==="201000000000"){
+  if(!isValidWhatsAppNumber(WA_NUMBER)){
     event.preventDefault();
-    showToast("عدّلي رقم واتساب في أول الكود قبل الطلب");
+    showToast("عدّلي رقم واتساب الحقيقي في أول الكود قبل الطلب");
     return;
   }
   /* السلة لا تُمسح تلقائيًا؛ العميل يرجع للموقع ويكمل تعديلها لو احتاج */
